@@ -9,15 +9,23 @@ import (
 )
 
 func RegisterRoutes(router *gin.Engine) {
-	// CORS configuration
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8003", "http://127.0.0.1:8000", "https://edu-tech-v1-mu.vercel.app/"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept"},
-		ExposeHeaders:    []string{"Content-Length", "Authorization"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+    // CORS configuration - ADD YOUR LIVE WEB APP URL
+    router.Use(cors.New(cors.Config{
+        AllowOrigins: []string{
+            "http://localhost:8003",          // Your admin panel
+            "http://127.0.0.1:8000",         // Alternative local
+            "http://localhost:3000",         // Common dev port
+            "https://edu-tech-v1-mu.vercel.app", // Your live web app (REMOVE trailing /)
+            "https://jaromind.com",   // Add if you have this
+            "http://localhost:5500",         // VS Code Live Server
+            "http://127.0.0.1:5500",         // Alternative
+        },
+        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+        AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept"},
+        ExposeHeaders:    []string{"Content-Length", "Authorization"},
+        AllowCredentials: true,
+        MaxAge:           12 * time.Hour,
+    }))
 
 	// Public routes
 	router.POST("/register", controllers.RegisterUser)
