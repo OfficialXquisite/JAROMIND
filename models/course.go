@@ -1,48 +1,52 @@
 ﻿package models
 
-import "time"
+import (
+	"time"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type Course struct {
-	ID              string           `json:"id" bson:"id"`
-	Title           string           `json:"title" bson:"title"`
-	Description     string           `json:"description" bson:"description"`
-	LongDescription string           `json:"longDescription" bson:"longDescription"`
-	Type            string           `json:"type" bson:"type"` // class, subject, workshop, certification
-	ClassLevel      string           `json:"classLevel,omitempty" bson:"classLevel,omitempty"`
-	Subject         string           `json:"subject,omitempty" bson:"subject,omitempty"`
-	Subjects        []string         `json:"subjects" bson:"subjects"`
-	ImageUrl        string           `json:"imageUrl" bson:"imageUrl"`
-	Status          string           `json:"status" bson:"status"` // free or paid
-	Price           float64          `json:"price" bson:"price"`
-	LessonCount     int              `json:"lessonCount" bson:"lessonCount"`
-	Duration        string           `json:"duration" bson:"duration"`
-	Level           string           `json:"level" bson:"level"`
-	IsActive        bool             `json:"isActive" bson:"isActive"`
-	IsFeatured      bool             `json:"isFeatured" bson:"isFeatured"`
-	EnrollmentCount int              `json:"enrollmentCount" bson:"enrollmentCount"`
-	Rating          float64          `json:"rating" bson:"rating"`
-	ReviewCount     int              `json:"reviewCount" bson:"reviewCount"`
-	Features        []string         `json:"features" bson:"features"`
-	Prerequisites   []string         `json:"prerequisites" bson:"prerequisites"`
-	LearningGoals   []string         `json:"learningGoals" bson:"learningGoals"`
-	Tutor           *Tutor           `json:"tutor" bson:"tutor"`
-	Curriculum      []CurriculumItem `json:"curriculum" bson:"curriculum"`
-	Certificate     bool             `json:"certificate" bson:"certificate"`
-	Language        string           `json:"language" bson:"language"`
-	Category        string           `json:"category" bson:"category"`
-	Tags            []string         `json:"tags" bson:"tags"`
-	Metadata        *CourseMetadata  `json:"metadata" bson:"metadata"`
-	CreatedAt       time.Time        `json:"createdAt" bson:"createdAt"`
-	UpdatedAt       time.Time        `json:"updatedAt" bson:"updatedAt"`
+	ID              primitive.ObjectID `json:"id" bson:"_id,omitempty"`  // Changed to ObjectID
+	Title           string             `json:"title" bson:"title"`
+	Description     string             `json:"description" bson:"description"`
+	LongDescription string             `json:"longDescription" bson:"longDescription"`
+	Type            string             `json:"type" bson:"type"`
+	ClassLevel      string             `json:"classLevel,omitempty" bson:"classLevel,omitempty"`
+	Subject         string             `json:"subject,omitempty" bson:"subject,omitempty"`
+	Subjects        []string           `json:"subjects" bson:"subjects"`
+	ImageUrl        string             `json:"imageUrl" bson:"imageUrl"`
+	Status          string             `json:"status" bson:"status"`
+	Price           float64            `json:"price" bson:"price"`
+	LessonCount     int                `json:"lessonCount" bson:"lessonCount"`
+	Duration        string             `json:"duration" bson:"duration"`
+	Level           string             `json:"level" bson:"level"`
+	IsActive        bool               `json:"isActive" bson:"isActive"`
+	IsFeatured      bool               `json:"isFeatured" bson:"isFeatured"`
+	EnrollmentCount int                `json:"enrollmentCount" bson:"enrollmentCount"`
+	Rating          float64            `json:"rating" bson:"rating"`
+	ReviewCount     int                `json:"reviewCount" bson:"reviewCount"`
+	Features        []string           `json:"features" bson:"features"`
+	Prerequisites   []string           `json:"prerequisites" bson:"prerequisites"`
+	LearningGoals   []string           `json:"learningGoals" bson:"learningGoals"`
+	Tutor           *Tutor             `json:"tutor" bson:"tutor"`
+	Curriculum      []CurriculumItem   `json:"curriculum" bson:"curriculum"`
+	Certificate     bool               `json:"certificate" bson:"certificate"`
+	Language        string             `json:"language" bson:"language"`
+	Category        string             `json:"category" bson:"category"`
+	Tags            []string           `json:"tags" bson:"tags"`
+	Metadata        *CourseMetadata    `json:"metadata" bson:"metadata"`
+	CreatedAt       time.Time          `json:"createdAt" bson:"createdAt"`
+	UpdatedAt       time.Time          `json:"updatedAt" bson:"updatedAt"`
 }
 
+// Other structs remain the same...
 type CourseMetadata struct {
 	Code                   string              `json:"code" bson:"code"`
 	QuizCount              int                 `json:"quizCount" bson:"quizCount"`
 	AssignmentCount        int                 `json:"assignmentCount" bson:"assignmentCount"`
 	EnrollmentType         string              `json:"enrollmentType" bson:"enrollmentType"`
 	MaxCapacity            int                 `json:"maxCapacity" bson:"maxCapacity"`
-	AccessLevel            string              `json:"accessLevel" bson:"accessLevel"` // basic, premium, premium-plus
+	AccessLevel            string              `json:"accessLevel" bson:"accessLevel"`
 	AccessPrerequisites    string              `json:"accessPrerequisites" bson:"accessPrerequisites"`
 	PromoVideoUrl          string              `json:"promoVideoUrl" bson:"promoVideoUrl"`
 	AdditionalMaterials    string              `json:"additionalMaterials" bson:"additionalMaterials"`
@@ -56,7 +60,7 @@ type CourseMetadata struct {
 	AssessmentMethod       string              `json:"assessmentMethod" bson:"assessmentMethod"`
 	GradingPolicy          string              `json:"gradingPolicy" bson:"gradingPolicy"`
 	AdditionalNotes        string              `json:"additionalNotes" bson:"additionalNotes"`
-	Visibility             string              `json:"visibility" bson:"visibility"` // published, draft, archived
+	Visibility             string              `json:"visibility" bson:"visibility"`
 	Restrictions           *AccessRestrictions `json:"restrictions" bson:"restrictions"`
 }
 

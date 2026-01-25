@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive" 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"github.com/AbaraEmmanuel/jaromind-backend/database"
@@ -27,6 +28,7 @@ func getReviewsCollection() *mongo.Collection {
 	return database.DB.Collection("reviews")
 }
 
+// GetAllCourses - Get all active courses with optional filters
 // GetAllCourses - Get all active courses with optional filters
 func GetAllCourses(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -72,10 +74,40 @@ func GetAllCourses(c *gin.Context) {
 	}
 	defer cursor.Close(ctx)
 
-	var courses []models.Course
-	if err = cursor.All(ctx, &courses); err != nil {
+	// FIXED: Use bson.M and ensure consistent ID field
+	var rawCourses []bson.M
+	if err = cursor.All(ctx, &rawCourses); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse courses"})
 		return
+	}
+
+	// Process to ensure consistent structure
+	var courses []bson.M
+	for _, rawCourse := range rawCourses {
+		course := bson.M{}
+		
+		// Copy all fields
+		for key, value := range rawCourse {
+			course[key] = value
+		}
+		
+		// Ensure id field is correct
+		// If course has id field, use it
+		if id, exists := rawCourse["id"]; exists && id != "" {
+			course["id"] = id
+		} else {
+			// If no id field, create from _id
+			if mongoID, exists := rawCourse["_id"]; exists {
+				if objID, ok := mongoID.(primitive.ObjectID); ok {
+					course["id"] = objID.Hex()
+				}
+			}
+		}
+		
+		// Remove _id field to avoid confusion
+		delete(course, "_id")
+		
+		courses = append(courses, course)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -91,12 +123,34 @@ func GetCourseByID(c *gin.Context) {
 
 	courseID := c.Param("id")
 	
-	var course models.Course
+	// Try to find by id field first
+	var course bson.M
 	err := getCoursesCollection().FindOne(ctx, bson.M{"id": courseID, "isActive": true}).Decode(&course)
+	
+	// If not found by id field, try by _id (for backward compatibility)
+	if err != nil {
+		// Try to convert to ObjectID
+		if objID, err2 := primitive.ObjectIDFromHex(courseID); err2 == nil {
+			err = getCoursesCollection().FindOne(ctx, bson.M{"_id": objID, "isActive": true}).Decode(&course)
+		}
+	}
+	
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
 		return
 	}
+
+	// Ensure id field is present in response
+	if _, exists := course["id"]; !exists {
+		if mongoID, exists := course["_id"]; exists {
+			if objID, ok := mongoID.(primitive.ObjectID); ok {
+				course["id"] = objID.Hex()
+			}
+		}
+	}
+	
+	// Remove _id field
+	delete(course, "_id")
 
 	// Get reviews for this course
 	cursor, _ := getReviewsCollection().Find(ctx, bson.M{"courseId": courseID}, options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}}).SetLimit(10))
@@ -109,24 +163,45 @@ func GetCourseByID(c *gin.Context) {
 	})
 }
 
+
+// CreateCourse - Admin only
 // CreateCourse - Admin only
 func CreateCourse(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var course models.Course
-	
-	if err := c.ShouldBindJSON(&course); err != nil {
+	// Parse incoming JSON into bson.M to handle flexible structure
+	var courseData bson.M
+	if err := c.ShouldBindJSON(&courseData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	course.ID = uuid.New().String()
-	course.CreatedAt = time.Now()
-	course.UpdatedAt = time.Now()
-	course.IsActive = true
+	// Generate a new UUID for the course
+	courseID := uuid.New().String()
+	
+	// Set required fields
+	courseData["id"] = courseID
+	courseData["createdAt"] = time.Now()
+	courseData["updatedAt"] = time.Now()
+	courseData["isActive"] = true
+	
+	// Set defaults if not provided
+	if _, exists := courseData["enrollmentCount"]; !exists {
+		courseData["enrollmentCount"] = 0
+	}
+	if _, exists := courseData["rating"]; !exists {
+		courseData["rating"] = 0.0
+	}
+	if _, exists := courseData["reviewCount"]; !exists {
+		courseData["reviewCount"] = 0
+	}
+	if _, exists := courseData["lessonCount"]; !exists {
+		courseData["lessonCount"] = 0
+	}
 
-	_, err := getCoursesCollection().InsertOne(ctx, course)
+	// Insert the course
+	_, err := getCoursesCollection().InsertOne(ctx, courseData)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create course"})
 		return
@@ -134,7 +209,7 @@ func CreateCourse(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Course created successfully",
-		"course":  course,
+		"course":  courseData,
 	})
 }
 
@@ -145,18 +220,33 @@ func UpdateCourse(c *gin.Context) {
 
 	courseID := c.Param("id")
 
-	var updates models.Course
+	// Parse updates
+	var updates bson.M
 	if err := c.ShouldBindJSON(&updates); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	updates.UpdatedAt = time.Now()
+	// Don't allow updating the ID
+	delete(updates, "id")
+	delete(updates, "_id")
 	
-	// Convert to bson.M for update
+	// Add updated timestamp
+	updates["updatedAt"] = time.Now()
+	
+	// Build update document
 	updateDoc := bson.M{"$set": updates}
 
+	// Try to update by id field
 	result, err := getCoursesCollection().UpdateOne(ctx, bson.M{"id": courseID}, updateDoc)
+	
+	// If not found by id, try by _id
+	if err != nil || result.MatchedCount == 0 {
+		if objID, err2 := primitive.ObjectIDFromHex(courseID); err2 == nil {
+			result, err = getCoursesCollection().UpdateOne(ctx, bson.M{"_id": objID}, updateDoc)
+		}
+	}
+	
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update course"})
 		return
@@ -177,14 +267,29 @@ func DeleteCourse(c *gin.Context) {
 
 	courseID := c.Param("id")
 	
-	_, err := getCoursesCollection().UpdateOne(ctx, bson.M{"id": courseID}, bson.M{"$set": bson.M{"isActive": false}})
+	// Try to delete by id field
+	result, err := getCoursesCollection().UpdateOne(ctx, bson.M{"id": courseID}, bson.M{"$set": bson.M{"isActive": false}})
+	
+	// If not found by id, try by _id
+	if err != nil || result.MatchedCount == 0 {
+		if objID, err2 := primitive.ObjectIDFromHex(courseID); err2 == nil {
+			result, err = getCoursesCollection().UpdateOne(ctx, bson.M{"_id": objID}, bson.M{"$set": bson.M{"isActive": false}})
+		}
+	}
+	
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete course"})
 		return
 	}
 
+	if result.MatchedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Course deleted successfully"})
 }
+
 
 // EnrollInCourse - Student enrollment
 func EnrollInCourse(c *gin.Context) {
@@ -424,11 +529,30 @@ func GetCourseStats(c *gin.Context) {
 
 	courseID := c.Param("id")
 
-	var course models.Course
+	// Try to find by id field
+	var course bson.M
 	err := getCoursesCollection().FindOne(ctx, bson.M{"id": courseID}).Decode(&course)
+	
+	// If not found, try by _id
+	if err != nil {
+		if objID, err2 := primitive.ObjectIDFromHex(courseID); err2 == nil {
+			err = getCoursesCollection().FindOne(ctx, bson.M{"_id": objID}).Decode(&course)
+		}
+	}
+	
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
 		return
+	}
+
+	// Extract enrollment count
+	enrollmentCount := 0
+	if ec, exists := course["enrollmentCount"]; exists {
+		if e, ok := ec.(int32); ok {
+			enrollmentCount = int(e)
+		} else if e, ok := ec.(int); ok {
+			enrollmentCount = e
+		}
 	}
 
 	completionCount, _ := getEnrollmentsCollection().CountDocuments(ctx, bson.M{
@@ -437,15 +561,13 @@ func GetCourseStats(c *gin.Context) {
 	})
 
 	completionRate := 0.0
-	if course.EnrollmentCount > 0 {
-		completionRate = float64(completionCount) / float64(course.EnrollmentCount) * 100
+	if enrollmentCount > 0 {
+		completionRate = float64(completionCount) / float64(enrollmentCount) * 100
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"enrollments":    course.EnrollmentCount,
+		"enrollments":    enrollmentCount,
 		"completions":    completionCount,
-		"rating":         course.Rating,
-		"reviewCount":    course.ReviewCount,
 		"completionRate": completionRate,
 	})
 }
