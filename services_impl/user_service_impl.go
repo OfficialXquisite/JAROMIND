@@ -1,4 +1,4 @@
-package servicesimpl
+package services_impl
 
 import (
 	"context"
