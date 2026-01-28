@@ -78,49 +78,36 @@ func (s *ReviewServiceImpl) CreateReview(ctx context.Context, review *models.Rev
 }
 
 // GetReviewsByCourseID retrieves all reviews for a specific course
+// GetReviewsByCourseID retrieves all reviews for a specific course
 func (s *ReviewServiceImpl) GetReviewsByCourseID(ctx context.Context, courseID string) ([]models.Review, error) {
-    // Try to convert as ObjectID first
-    if objID, err := primitive.ObjectIDFromHex(courseID); err == nil {
-        // It's an ObjectID
-        filter := bson.M{"course_id": objID}
-        opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
-        
-        cursor, err := s.reviewCollection.Find(ctx, filter, opts)
-        if err != nil {
-            return nil, err
-        }
-        defer cursor.Close(ctx)
-        
-        var reviews []models.Review
-        if err := cursor.All(ctx, &reviews); err != nil {
-            return nil, err
-        }
-        
-        if reviews == nil {
-            reviews = []models.Review{}
-        }
-        
-        return reviews, nil
-    }
+    fmt.Println("\n=== GET REVIEWS BY COURSE ID ===")
+    fmt.Printf("Course ID received: %s\n", courseID)
     
-    // If not ObjectID, try as string/UUID
+    // Since CourseID is stored as a string (UUID), query directly as string
     filter := bson.M{"course_id": courseID}
     opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
     
+    fmt.Printf("Querying with filter: %+v\n", filter)
+    
     cursor, err := s.reviewCollection.Find(ctx, filter, opts)
     if err != nil {
+        fmt.Printf("❌ Error querying reviews: %v\n", err)
         return nil, err
     }
     defer cursor.Close(ctx)
     
     var reviews []models.Review
     if err := cursor.All(ctx, &reviews); err != nil {
+        fmt.Printf("❌ Error decoding reviews: %v\n", err)
         return nil, err
     }
     
     if reviews == nil {
         reviews = []models.Review{}
     }
+    
+    fmt.Printf("✅ Found %d reviews\n", len(reviews))
+    fmt.Println("=== GET REVIEWS - SUCCESS ===")
     
     return reviews, nil
 }
@@ -214,63 +201,59 @@ func (s *ReviewServiceImpl) DeleteReview(ctx context.Context, reviewID string) e
 
 // GetReviewByUserAndCourse checks if user already reviewed a course
 func (s *ReviewServiceImpl) GetReviewByUserAndCourse(ctx context.Context, userID, courseID string) (*models.Review, error) {
+    fmt.Println("\n=== GET REVIEW BY USER AND COURSE ===")
+    fmt.Printf("User ID: %s, Course ID: %s\n", userID, courseID)
+    
     userObjectID, err := primitive.ObjectIDFromHex(userID)
     if err != nil {
+        fmt.Printf("❌ Invalid user ID: %v\n", err)
         return nil, errors.New("invalid user ID")
     }
 
-    // Try to convert courseID to ObjectID first
-    var filter bson.M
-    if courseObjID, err := primitive.ObjectIDFromHex(courseID); err == nil {
-        // CourseID is an ObjectID
-        filter = bson.M{
-            "user_id":   userObjectID,
-            "course_id": courseObjID,
-        }
-    } else {
-        // CourseID is a string/UUID
-        filter = bson.M{
-            "user_id":   userObjectID,
-            "course_id": courseID,
-        }
+    // Query with string course_id directly
+    filter := bson.M{
+        "user_id":   userObjectID,
+        "course_id": courseID,  // ✅ Use string directly
     }
+    
+    fmt.Printf("Filter: %+v\n", filter)
 
     var review models.Review
     err = s.reviewCollection.FindOne(ctx, filter).Decode(&review)
     if err != nil {
         if err == mongo.ErrNoDocuments {
+            fmt.Println("ℹ️ No existing review found")
             return nil, nil // No existing review found (not an error)
         }
+        fmt.Printf("❌ Error finding review: %v\n", err)
         return nil, err
     }
 
+    fmt.Printf("✅ Found existing review: %v\n", review.ID)
     return &review, nil
 }
 
 // CalculateCourseRating calculates average rating for a course
 func (s *ReviewServiceImpl) CalculateCourseRating(ctx context.Context, courseID string) (float64, int, error) {
-    // Try to convert as ObjectID first
-    var filter bson.M
-    if objID, err := primitive.ObjectIDFromHex(courseID); err == nil {
-        // It's an ObjectID
-        filter = bson.M{"course_id": objID}
-    } else {
-        // It's a string/UUID
-        filter = bson.M{"course_id": courseID}
-    }
-
+    fmt.Println("\n=== CALCULATE COURSE RATING ===")
+    fmt.Printf("Course ID: %s\n", courseID)
+    
+    // Query with string course_id directly
+    filter := bson.M{"course_id": courseID}
+    
     // Aggregate pipeline to calculate average rating
     pipeline := mongo.Pipeline{
         {{Key: "$match", Value: filter}},
         {{Key: "$group", Value: bson.M{
-            "_id":         nil,
-            "avgRating":   bson.M{"$avg": "$rating"},
+            "_id":          nil,
+            "avgRating":    bson.M{"$avg": "$rating"},
             "totalReviews": bson.M{"$sum": 1},
         }}},
     }
 
     cursor, err := s.reviewCollection.Aggregate(ctx, pipeline)
     if err != nil {
+        fmt.Printf("❌ Error aggregating: %v\n", err)
         return 0, 0, err
     }
     defer cursor.Close(ctx)
@@ -281,13 +264,16 @@ func (s *ReviewServiceImpl) CalculateCourseRating(ctx context.Context, courseID 
     }
 
     if err := cursor.All(ctx, &result); err != nil {
+        fmt.Printf("❌ Error decoding results: %v\n", err)
         return 0, 0, err
     }
 
     if len(result) == 0 {
+        fmt.Println("ℹ️ No reviews found for this course")
         return 0, 0, nil
     }
 
+    fmt.Printf("✅ Average rating: %.2f, Total reviews: %d\n", result[0].AvgRating, result[0].TotalReviews)
     return result[0].AvgRating, result[0].TotalReviews, nil
 }
 
